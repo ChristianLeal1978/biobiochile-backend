@@ -6,6 +6,7 @@ Este es el script que el scheduler ejecuta cada mañana.
 
 import os
 import json
+import re
 import anthropic
 from datetime import date
 from dotenv import load_dotenv
@@ -17,30 +18,43 @@ SYSTEM_PROMPT = """Eres el sistema predictivo editorial de BioBioChile, medio re
 
 Tu tarea es predecir qué temas y enfoques tendrán mayor interés para la audiencia en los próximos 7 días, basándote en el contexto que se te entrega.
 
-Devuelve ÚNICAMENTE un JSON válido con esta estructura exacta, sin texto adicional, sin backticks:
+Devuelve ÚNICAMENTE un objeto JSON válido. Sin texto antes ni después. Sin backticks. Sin markdown. Solo el JSON puro.
+
+Estructura exacta:
 
 {
   "generado_el": "string con fecha y hora",
-  "alerta": "string | null — solo si hay un tema urgente que podría explotar en los próximos días",
+  "alerta": "string o null",
   "predicciones": [
     {
-      "tema": "string — nombre del tema",
-      "categoria": "string — categoría editorial",
+      "tema": "string",
+      "categoria": "string",
       "confianza": número entre 0 y 100,
-      "razon": "string — por qué es relevante ahora, máximo 2 oraciones",
+      "razon": "string, máximo 2 oraciones",
       "enfoques": [
         {
-          "enfoque": "string — ángulo específico",
-          "titular_sugerido": "string — titular listo para usar"
+          "enfoque": "string",
+          "titular_sugerido": "string"
         }
       ],
-      "ventana_optima": "string — ej: martes o miércoles esta semana"
+      "ventana_optima": "string"
     }
   ]
 }
 
 Devuelve entre 4 y 6 predicciones ordenadas de mayor a menor confianza.
 Sé específico para la audiencia regional del Biobío, no genérico."""
+
+
+def clean_json(raw: str) -> str:
+    """Elimina backticks y cualquier texto antes o después del JSON."""
+    raw = re.sub(r"```json\s*", "", raw)
+    raw = re.sub(r"```\s*", "", raw)
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start == -1 or end == -1:
+        raise ValueError("No se encontró JSON válido en la respuesta")
+    return raw[start:end + 1].strip()
 
 
 def run_prediction():
@@ -50,7 +64,6 @@ def run_prediction():
     """
     print("[Predictor] Iniciando ciclo de predicción...")
 
-    # 1. Obtener contexto real
     context = get_current_context()
 
     user_prompt = f"""Genera las predicciones editoriales para la semana {context['semana_del_ano']} del año.
@@ -69,33 +82,30 @@ Temas con más tráfico esta semana en BioBioChile (GA4):
 Tendencias en Google Chile:
 {json.dumps(context['tendencias_google'], ensure_ascii=False, indent=2)}
 
-Genera las predicciones para los próximos 7 días."""
+Genera las predicciones para los próximos 7 días. Responde SOLO con el JSON, sin backticks ni texto adicional."""
 
-    # 2. Llamar a Claude
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
     try:
         message = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-sonnet-4-6",
             max_tokens=2000,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}],
         )
 
         raw = message.content[0].text
-        clean = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-result = json.loads(clean)
+        cleaned = clean_json(raw)
+        result = json.loads(cleaned)
         print(f"[Predictor] Claude generó {len(result.get('predicciones', []))} predicciones.")
 
-    except json.JSONDecodeError as e:
+    except (json.JSONDecodeError, ValueError) as e:
         print(f"[Predictor] Error al parsear JSON de Claude: {e}")
-        print(f"Raw response: {raw[:500]}")
         return None
     except Exception as e:
         print(f"[Predictor] Error al llamar a Claude: {e}")
         return None
 
-    # 3. Guardar en Supabase
     result["fecha"] = date.today().isoformat()
     result["contexto"] = context
     _save_to_supabase(result)
