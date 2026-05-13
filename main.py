@@ -35,7 +35,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://biobiochile-predictor.vercel.app",  # ← reemplazar con tu URL real de Vercel
+        "https://biobiochile-frontend.vercel.app",  # ← reemplazar con tu URL real de Vercel
         "http://localhost:5173",                        # desarrollo local
     ],
     allow_methods=["GET", "POST"],
