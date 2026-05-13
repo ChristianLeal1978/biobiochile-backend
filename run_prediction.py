@@ -83,7 +83,8 @@ Genera las predicciones para los próximos 7 días."""
         )
 
         raw = message.content[0].text
-        result = json.loads(raw)
+        clean = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+result = json.loads(clean)
         print(f"[Predictor] Claude generó {len(result.get('predicciones', []))} predicciones.")
 
     except json.JSONDecodeError as e:
