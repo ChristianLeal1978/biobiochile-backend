@@ -89,7 +89,7 @@ Genera las predicciones para los próximos 7 días. Responde SOLO con el JSON, s
     try:
         message = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=2000,
+            max_tokens=4096,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}],
         )
