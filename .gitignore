@@ -1,0 +1,7 @@
+.env
+venv/
+__pycache__/
+*.pyc
+*.pyo
+ga4-credentials.json
+.DS_Store
